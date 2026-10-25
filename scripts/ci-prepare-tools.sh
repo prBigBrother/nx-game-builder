@@ -12,4 +12,4 @@ fi
 uv python install 3.13.12
 PYTHON_ROOT="$(uv python find 3.13.12 --managed-python)"
 PYTHON_ROOT="$(dirname "$(dirname "$PYTHON_ROOT")")"
-python3 "$ROOT/scripts/prepare-bundled-toolchain.py" --python "$PYTHON_ROOT" --dotnet "${DOTNET_ROOT:?setup-dotnet must set DOTNET_ROOT}" --repository "$ROOT/.nxnative"
+"$PYTHON_ROOT/bin/python3.13" "$ROOT/scripts/prepare-bundled-toolchain.py" --python "$PYTHON_ROOT" --dotnet "${DOTNET_ROOT:?setup-dotnet must set DOTNET_ROOT}" --repository "$ROOT/.nxnative"

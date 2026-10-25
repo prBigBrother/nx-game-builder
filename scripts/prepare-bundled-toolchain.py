@@ -106,6 +106,9 @@ def main():
     parser.add_argument('--dotnet',type=Path,required=True)
     parser.add_argument('--repository',type=Path,default=ROOT/'.nxnative')
     args=parser.parse_args()
+    sdks=[p for p in (args.dotnet/'sdk').iterdir() if p.is_dir()]
+    if len(sdks) != 1 or not sdks[0].name.startswith('10.'):
+        raise ValueError('Use an isolated .NET SDK 10 installation, not a machine-wide directory with multiple SDKs.')
     OUT.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='toolchain-',dir=OUT) as temp:
         stage=Path(temp)/'tools';stage.mkdir()
@@ -129,6 +132,9 @@ def main():
         print('Copying tracked nxnative sources and local game-profile fixes…',flush=True)
         repo=args.repository.resolve()
         files=subprocess.check_output(['git','-C',repo,'ls-files','-z']).decode().split('\0')
+        # New container readers may be uncommitted during bring-up. Include the
+        # Python tool modules the splitter imports, as its cache fingerprint does.
+        files=sorted(set(filter(None,files)) | {str(p.relative_to(repo)) for p in (repo/'dm/gfx/tools').glob('*.py')})
         for name in filter(None,files): copy(repo/name,stage/'nxnative'/name)
         feed=stage/'nuget-feed';feed.mkdir()
         nupkg=Path.home()/'.nuget/packages/libhac/0.19.0/libhac.0.19.0.nupkg'

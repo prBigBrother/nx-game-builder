@@ -23,3 +23,5 @@ The runtime font **NX Game Sans** is a regular-weight static derivative of Noto 
 The toolchain archive includes the original license files, embedded source notices and a component-version record. NX Game Builder and each newly generated game app also contain a readable `Contents/Resources/Licenses` directory. The game app's original game content remains subject to its owner's rights; runtime licenses do not license that content.
 
 Some native tool binaries have their Mach-O load paths changed to use private bundled libraries and are ad-hoc re-signed. These are packaging changes, not a claim of upstream endorsement. The nxnative shader-fetch changes are recorded in `patches/nxnative.patch`. Full license texts and existing NOTICE/PATENTS files take precedence over this summary.
+
+`RuntimeLicenses/PythonBuildComponents` retains the upstream Python-build component license collection (including OpenSSL, libffi, bzip2, libedit, SQLite, Tcl, zlib and others) and its source revision. It may also include notices for optional build components absent from this macOS runtime; inclusion does not assert that every listed component is linked.

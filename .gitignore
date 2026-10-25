@@ -30,3 +30,5 @@ __pycache__/
 /scripts/build-fire-emblem-mac.py
 /scripts/mac-game-launcher.c
 /scripts/summarize-link-awakening-log.py
+
+/scripts/rebuild-*-host.sh

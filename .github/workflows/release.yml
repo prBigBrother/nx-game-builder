@@ -16,6 +16,10 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/nx-dotnet
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     steps:
       - uses: actions/checkout@v4
       - name: Confirm Apple silicon runner

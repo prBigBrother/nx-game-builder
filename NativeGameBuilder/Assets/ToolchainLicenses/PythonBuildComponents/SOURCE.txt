@@ -1,0 +1,1 @@
+Reference license collection from https://github.com/astral-sh/python-build-standalone at 8a5e2169bf006837f4ba5f90059ad68921dd166c. Original notices retained. This collection may cover optional build components not present in the bundled macOS runtime.
