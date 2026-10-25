@@ -1,0 +1,84 @@
+name: Build and release macOS app
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm Apple silicon runner
+        run: test "$(uname -m)" = arm64
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.402'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.5'
+      - name: Install distribution build tools
+        run: brew install spirv-cross glslang zstd
+      - uses: actions/cache@v4
+        id: toolchain
+        with:
+          path: |
+            build/bundled-toolchain
+            build/font-assets
+            build/third-party-notices
+          key: offline-tools-arm64-v3-${{ hashFiles('scripts/prepare-bundled-toolchain.py', 'scripts/prepare-release-fonts.py', 'scripts/collect-notices.py', 'scripts/ci-prepare-tools.sh', 'patches/**', 'requirements-toolchain.txt', 'NativeGameBuilder/Assets/Fonts/**', 'NativeGameBuilder/Assets/ToolchainLicenses/**', 'THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+      - name: Prepare offline toolchain, fonts and notices
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: bash scripts/ci-prepare-tools.sh
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: test "$RELEASE_TAG" = "v$(cat VERSION)"
+      - name: Run lightweight tests
+        run: uv run --python 3.13.12 --with fonttools==4.67.0 python -m unittest discover -s NativeGameBuilder/Tests -v
+      - name: Test Swift progress and Dock lifecycle
+        run: |
+          swiftc NativeGameBuilder/Sources/NXGameBuilder/{BuildProgress,Localization,DockProgress}.swift NativeGameBuilder/Tests/UIModelChecks.swift -o build/ui-model-checks
+          ./build/ui-model-checks
+      - name: Build application
+        run: bash build-native-game-builder.sh --build-only
+      - name: Build DMG and checksum
+        run: bash scripts/build-dmg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NX-Game-Builder-arm64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: build
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: NX-Game-Builder-arm64
+          path: dist
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "NX Game Builder $RELEASE_TAG" --notes-file RELEASE_NOTES.md
+          fi

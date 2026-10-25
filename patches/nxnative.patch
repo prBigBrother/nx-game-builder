@@ -1,0 +1,102 @@
+diff --git a/dm/gfx/tools/dmsh_fetch.py b/dm/gfx/tools/dmsh_fetch.py
+index 843f4d0..7a8236a 100644
+--- a/dm/gfx/tools/dmsh_fetch.py
++++ b/dm/gfx/tools/dmsh_fetch.py
+@@ -9,48 +9,83 @@ import re
+ 
+ NFB = 8
+ 
++def main_entry_span(msl):
++    """Return the ordinary fragment entry point, excluding appended entry variants such as main0_u."""
++    m = re.search(r'\bfragment\s+main0_out\s+main0\s*\(', msl)
++    if not m: return None
++    brace = msl.find('{', m.end())
++    if brace < 0: return None
++    depth = 0
++    for end in range(brace, len(msl)):
++        depth += msl[end] == '{'; depth -= msl[end] == '}'
++        if depth == 0: return m.start(), end + 1
++    return None
++
+ def variant(msl, bindings, om_only_ok=False):
+     tex = {m.group(1) for m in re.finditer(r'texture2d<float> (\w+) \[\[id\(\d+\)\]\];', msl)}
+     locn = {m.group(1): int(m.group(2)) for m in re.finditer(r'float4 (m_\d+) \[\[user\(locn(\d+)\)\]\];', msl.split('struct main0_in', 1)[-1].split('};', 1)[0])}
+     reg = {b['msl_name']: b['reg'] for b in bindings if b.get('kind') == 'tex' and b.get('msl_name') and b.get('reg') is not None}
+     pat = re.compile(r'spvDescriptorSet0\.(\w+)\.sample\(spvDescriptorSet0\.(\w+)Smplr, select\((_\d+), float2\(0\.0\), isnan\(\3\)\)\)')
++    span = main_entry_span(msl)
++    if not span: return None, 'main function signature not recognized'
++    start, end = span
++    prefix, entry, suffix = msl[:start], msl[start:end], msl[end:]
+     calls, out_parts, pos = [], [], 0
+-    for m in pat.finditer(msl):
++    for m in pat.finditer(entry):
+         member, var = m.group(1), m.group(3)
+         if member not in tex or member != m.group(2) or member not in reg: continue
+-        d = re.search(r'float2 %s = float2\((_\d+), (_\d+)\);' % var, msl)
+-        a = d and re.search(r'float %s = in\.(m_\d+)\.x;' % d.group(1), msl); b = d and re.search(r'float %s = in\.(m_\d+)\.y;' % d.group(2), msl)
++        d = re.search(r'float2 %s = float2\((_\d+), (_\d+)\);' % var, entry)
++        a = d and re.search(r'float %s = in\.(m_\d+)\.x;' % d.group(1), entry); b = d and re.search(r'float %s = in\.(m_\d+)\.y;' % d.group(2), entry)
+         if not (a and b) or a.group(1) != b.group(1) or a.group(1) not in locn: continue
+         i = len(calls)
+         if i >= 32: break
+         sel = ''.join(f'FX_{i} == {k} ? fb{k} : ' for k in range(NFB))
+-        out_parts.append(msl[pos:m.start()]); out_parts.append(f'({sel}{m.group(0)})'); pos = m.end()
++        out_parts.append(entry[pos:m.start()]); out_parts.append(f'({sel}{m.group(0)})'); pos = m.end()
+         calls.append({'fc': i, 'tex_reg': reg[member], 'varying_locn': locn[a.group(1)]})
+     if not calls and not om_only_ok:
+         return None, 'no rewritable sample'
+     # Mixed-use slots: the same texture also has other (non-rewritable) uses - at runtime this texture must not be switched to tile reads (the rewritten reads and the unrewritten ones would not see the same data)
+     conv = {}
+     for c in calls: conv[c['tex_reg']] = conv.get(c['tex_reg'], 0) + 1
+-    mixed = sorted({reg[mb] for mb in reg if mb in tex and msl.count(f'spvDescriptorSet0.{mb}.') > conv.get(reg[mb], 0)})
+-    body = ''.join(out_parts) + msl[pos:]
++    mixed = sorted({reg[mb] for mb in reg if mb in tex and entry.count(f'spvDescriptorSet0.{mb}.') > conv.get(reg[mb], 0)})
++    entry = ''.join(out_parts) + entry[pos:]
++    body = prefix + entry + suffix
+     om = re.search(r'struct main0_out\s*\{(.*?)\};', body, re.S)
+     if not om: return None, 'no output struct'
+     outs = [(t, n, int(c)) for t, n, c in re.findall(r'(\w+) (m_\d+) \[\[color\((\d+)\)\]\];', om.group(1))]
+     if not outs or len(outs) > 4 or re.sub(r'\w+ m_\d+ \[\[color\(\d+\)\]\];', '', om.group(1)).strip(): return None, 'the output struct is not plain color outputs (or has more than 4)'
++    has_uint_entry = re.search(r'\bfragment\s+main0_out_u\s+main0_u\s*\(', body) is not None
+     members = ''.join(f'    {t} {n}_at{k} [[color({k}), function_constant(OM_{j}_{k})]];\n' for j, (t, n, c) in enumerate(outs) for k in range(NFB))
+     body = body[:om.start(1)] + '\n' + members + body[om.end(1):]
++    if has_uint_entry:
++        float_members = ''.join(f'    {t} {n};\n' for t, n, c in outs)
++        float_struct = 'struct main0_out_float\n{\n' + float_members + '};\n\n'
++        body = body.replace('struct main0_out\n{', float_struct + 'struct main0_out\n{', 1)
+     consts = ''.join(f'constant int FX_{c["fc"]} [[function_constant({c["fc"]})]];\n' for c in calls) + \
+              ''.join(f'constant bool FB_{k} [[function_constant({32 + k})]];\n' for k in range(NFB)) + \
+              ''.join(f'constant bool OM_{j}_{k} [[function_constant({64 + 8 * j + k})]];\n' for j in range(len(outs)) for k in range(NFB))
+     body = body.replace('using namespace metal;\n', 'using namespace metal;\n\n' + consts, 1)
+-    i0 = body.find('fragment main0_out main0(')
+-    i1 = body.find(')\n{', i0) if i0 >= 0 else -1   # end of signature: closing parenthesis immediately followed by a newline and an opening brace (parameter attributes contain brackets such as [[buffer(0)]])
+-    if i0 < 0 or i1 < 0: return None, 'main function signature not recognized'
+-    body = body[:i1] + ''.join(f', float4 fb{k} [[color({k}), function_constant(FB_{k})]]' for k in range(NFB)) + body[i1:]
++    span = main_entry_span(body)
++    if not span: return None, 'main function signature not recognized'
++    start, end = span
++    entry = body[start:end]
++    i1 = entry.find(')\n{')   # parameter attributes contain brackets such as [[buffer(0)]])
++    if i1 < 0: return None, 'main function signature not recognized'
++    entry = entry[:i1] + ''.join(f', float4 fb{k} [[color({k}), function_constant(FB_{k})]]' for k in range(NFB)) + entry[i1:]
+     decl = ''.join(f'    {t} spv_o_{n} = {t}(0);\n' for t, n, c in outs)
+-    body = body.replace('    main0_out out = {};\n', '    main0_out out = {};\n' + decl, 1)
+-    for t, n, c in outs: body = body.replace(f'out.{n}', f'spv_o_{n}')
++    entry = entry.replace('    main0_out out = {};\n', '    main0_out out = {};\n' + decl, 1)
++    for t, n, c in outs: entry = entry.replace(f'out.{n}', f'spv_o_{n}')
+     put = ''.join(f'    if (OM_{j}_{k}) out.{n}_at{k} = spv_o_{n};\n' for j, (t, n, c) in enumerate(outs) for k in range(NFB))
+-    if body.count('    return out;\n') < 1: return None, 'return out not found'
+-    body = body.replace('    return out;\n', put + '    return out;\n')
++    if entry.count('    return out;\n') < 1: return None, 'return out not found'
++    entry = entry.replace('    return out;\n', put + '    return out;\n')
++    body = body[:start] + entry + body[end:]
++    if has_uint_entry:
++        uint_start = body.find('fragment main0_out_u main0_u(')
++        if uint_start < 0: return None, 'integer-output entry point not found'
++        brace = body.find('{', uint_start); depth = 0
++        for uint_end in range(brace, len(body)):
++            depth += body[uint_end] == '{'; depth -= body[uint_end] == '}'
++            if depth == 0: break
++        uint_entry = body[uint_start:uint_end + 1].replace('main0_out out = {};', 'main0_out_float out = {};', 1)
++        body = body[:uint_start] + uint_entry + body[uint_end + 1:]
+     return body, {'calls': calls, 'mixed_regs': mixed, 'outputs': [{'color': c, 'type': t} for t, n, c in outs]}

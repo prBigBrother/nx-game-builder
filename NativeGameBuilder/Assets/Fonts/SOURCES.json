@@ -1,0 +1,8 @@
+{
+  "project": "Noto CJK",
+  "repository": "https://github.com/notofonts/noto-cjk",
+  "revision": "f8d157532fbfaeda587e826d4cd5b21a49186f7c",
+  "file": "Sans/Variable/TTF/NotoSansCJKjp-VF.ttf",
+  "license": "SIL Open Font License 1.1",
+  "derivatives": "NX Game Sans (weight 400), NX Game Letter Shapes (subset, weight 700), NX Game Symbols (generated outlines and geometric shapes); modified names avoid the reserved name Source"
+}

@@ -1,0 +1,32 @@
+# Private workspace and generated outputs — never publish game content or keys.
+/.nxnative/
+/BuilderWork/
+/game/
+/build/
+/dist/
+*.keys
+*.nsp
+*.nsz
+*.xci
+*.xcz
+*.nca
+*.nro
+*.nso
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.build/
+.swiftpm/
+*.p12
+*.pfx
+*.mobileprovision
+.env
+.env.*
+# Legacy local game-specific scripts are outside the distributable project.
+/diagnose-link-awakening.sh
+/run-fire-emblem-on-mac.sh
+/run-link-awakening-on-mac.sh
+/scripts/build-fire-emblem-mac.py
+/scripts/mac-game-launcher.c
+/scripts/summarize-link-awakening-log.py
