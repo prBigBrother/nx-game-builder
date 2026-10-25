@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "NXGameBuilder",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("15.0")],
     products: [.executable(name: "NXGameBuilder", targets: ["NXGameBuilder"])],
     targets: [.executableTarget(name: "NXGameBuilder")]
 )

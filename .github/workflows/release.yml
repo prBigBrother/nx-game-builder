@@ -17,13 +17,14 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/nx-dotnet
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     steps:
       - uses: actions/checkout@v4
       - name: Confirm Apple silicon runner
         run: test "$(uname -m)" = arm64
+      - name: Isolate the distribution SDK
+        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TEMP/nx-dotnet" >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.402'
